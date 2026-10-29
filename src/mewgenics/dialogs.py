@@ -779,11 +779,12 @@ class AboutDialog(QDialog):
                 <li><b>Python:</b> {platform.python_version()}</li>
                 <li><b>PySide6:</b> {pyside_version}</li>
               </ul>
-              <p><a href="https://github.com/frankieg33/MewgenicsBreedingManager">Project on GitHub</a></p>
+              <p><a href="https://github.com/demiurg906/MewgenicsBreedingManager">Project on GitHub</a></p>
               <hr style="border:none; border-top:1px solid #26264a; margin:8px 0;">
               <p><b>Credits</b></p>
               <ul>
                 <li><b>Detailed Scoring</b> — concept and implementation by <a href="https://github.com/byronaltice">Byron Altice</a>.</li>
+                <li><b>Fork maintainer</b> — <a href="https://github.com/demiurg906">demiurg906</a>.</li>
               </ul>
             </div>
             """
@@ -840,7 +841,7 @@ class WhatsNewDialog(QDialog):
             <div style="line-height:1.5;">
               <p><b>Final maintained release.</b> Bundles the #102–#104 fixes, the new Getting Started guide, and the Detailed Scoring donation/exceptional source.</p>
               <ul>{bullets}</ul>
-              <p><a href="https://github.com/frankieg33/MewgenicsBreedingManager/releases">View releases on GitHub</a></p>
+              <p><a href="https://github.com/demiurg906/MewgenicsBreedingManager/releases">View releases on GitHub</a></p>
             </div>
             """
         )

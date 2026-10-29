@@ -70,7 +70,7 @@ Two views for evaluating which cats to keep, breed, or cull:
 ## Install
 
 ```bash
-git clone https://github.com/frankieg33/MewgenicsBreedingManager
+git clone https://github.com/demiurg906/MewgenicsBreedingManager
 cd MewgenicsBreedingManager
 pip install -r requirements.txt
 python src/mewgenics_manager.py
@@ -107,6 +107,7 @@ Produces a standalone executable via PyInstaller.
 - PR contributors: [0demongamer0](https://github.com/0demongamer0), [An-on-im](https://github.com/An-on-im), [byronaltice](https://github.com/byronaltice), [heartskingu](https://github.com/heartskingu), [ICaxapl](https://github.com/ICaxapl), [luisMolina95](https://github.com/luisMolina95), [TheMegax](https://github.com/TheMegax)
 - Simulated annealing (SA) idea from [PurpleMyst](https://github.com/PurpleMyst/mewgenics_breeding_helper)
 - Original idea and reference from frankieg33
+- Fork maintained by [demiurg906](https://github.com/demiurg906)
 
 ## Release Notes
 
