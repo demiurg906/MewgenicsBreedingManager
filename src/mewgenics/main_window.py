@@ -827,10 +827,23 @@ class MainWindow(QMainWindow):
         _set_total_stats_display(enabled)
         if hasattr(self, "_source_model"):
             self._source_model.set_show_total_stats(enabled)
+        self._sync_total_stats_controls(enabled)
         self._update_header(self._current_room_key())
         self.statusBar().showMessage(
             _tr("status.total_stats_display", default="Roster total-stat display {state}", state=_tr("common.on", default="on") if enabled else _tr("common.off", default="off"))
         )
+
+    def _sync_total_stats_controls(self, checked: bool, enabled: bool = True):
+        """Keep the Settings menu action and the header toolbar button in sync."""
+        for control in (getattr(self, "_total_stats_action", None), getattr(self, "_total_stats_btn", None)):
+            if control is None:
+                continue
+            control.blockSignals(True)
+            try:
+                control.setChecked(bool(checked))
+                control.setEnabled(bool(enabled))
+            finally:
+                control.blockSignals(False)
 
     def _toggle_stat_icon_mode(self, checked: bool):
         enabled = bool(checked)
@@ -1304,6 +1317,11 @@ class MainWindow(QMainWindow):
         self._search.setPlaceholderText(_tr("header.search_placeholder"))
         self._fight_club_abilities_filter.setPlaceholderText(_tr("header.filter.abilities", default="Abilities"))
         self._fight_club_mutations_filter.setPlaceholderText(_tr("header.filter.mutations", default="Mutations"))
+        self._total_stats_btn.setText(_tr("header.total_stats_toggle", default="Effective Stats"))
+        self._total_stats_btn.setToolTip(_tr(
+            "header.total_stats_toggle_tooltip",
+            default="Show effective stats (including injuries, mutations and other modifiers) instead of birth stats (Ctrl+T)",
+        ))
         self._loading_label.setText(_tr("loading.save_file"))
         self._cache_progress.setFormat(_tr("loading.cache.computing"))
         self._refresh_filter_button_counts()
@@ -1484,6 +1502,21 @@ class MainWindow(QMainWindow):
             "QPushButton:checked { background:#2a2a5a; color:#eee; border-color:#4a4a8a; }")
         self._pin_toggle.toggled.connect(self._on_pin_toggle)
 
+        self._total_stats_btn = QPushButton(_tr("header.total_stats_toggle", default="Effective Stats"))
+        self._total_stats_btn.setCheckable(True)
+        self._total_stats_btn.setChecked(_saved_total_stats_display())
+        self._total_stats_btn.setToolTip(_tr(
+            "header.total_stats_toggle_tooltip",
+            default="Show effective stats (including injuries, mutations and other modifiers) instead of birth stats (Ctrl+T)",
+        ))
+        self._total_stats_btn.setStyleSheet(
+            "QPushButton { background:#1a1a32; color:#aaa; border:1px solid #2a2a4a;"
+            " border-radius:4px; padding:3px 10px; font-size:11px; font-weight:bold; }"
+            "QPushButton:hover { background:#252545; color:#ddd; }"
+            "QPushButton:checked { background:#2a2a5a; color:#eee; border-color:#4a4a8a; }"
+            "QPushButton:disabled { color:#666; }")
+        self._total_stats_btn.clicked.connect(self._toggle_total_stats_display)
+
         self._tags_btn = QPushButton("Tags")
         self._tags_btn.setToolTip("Apply tags to selected cats")
         self._tags_btn.setStyleSheet(
@@ -1501,6 +1534,8 @@ class MainWindow(QMainWindow):
         hb.addSpacing(8)
         hb.addWidget(bulk_container)
         hb.addSpacing(10)
+        hb.addWidget(self._total_stats_btn)
+        hb.addSpacing(4)
         hb.addWidget(self._tags_btn)
         hb.addSpacing(4)
         hb.addWidget(self._pin_toggle)
@@ -3101,13 +3136,7 @@ class MainWindow(QMainWindow):
                 }
                 self._fight_club_prev_total_stats = self._source_model.show_total_stats()
             self._source_model.set_show_total_stats(True)
-            if hasattr(self, "_total_stats_action"):
-                self._total_stats_action.blockSignals(True)
-                try:
-                    self._total_stats_action.setChecked(True)
-                    self._total_stats_action.setEnabled(False)
-                finally:
-                    self._total_stats_action.blockSignals(False)
+            self._sync_total_stats_controls(True, enabled=False)
 
             for col in (COL_GEN, COL_BL, COL_MB, COL_LIB, COL_INBRD, COL_SEXUALITY,
                         COL_GEN_DEPTH, COL_SRC, COL_REL):
@@ -3124,13 +3153,7 @@ class MainWindow(QMainWindow):
             self._pin_roster_special_columns()
         else:
             self._source_model.set_show_total_stats(self._fight_club_prev_total_stats)
-            if hasattr(self, "_total_stats_action"):
-                self._total_stats_action.blockSignals(True)
-                try:
-                    self._total_stats_action.setEnabled(True)
-                    self._total_stats_action.setChecked(self._fight_club_prev_total_stats)
-                finally:
-                    self._total_stats_action.blockSignals(False)
+            self._sync_total_stats_controls(self._fight_club_prev_total_stats)
             hidden_state = self._fight_club_hidden_state or {}
             for col in range(col_count):
                 self._table.setColumnHidden(col, hidden_state.get(col, False))
@@ -3987,12 +4010,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_source_model"):
             self._source_model.set_show_total_stats(False)
             self._source_model.set_show_stat_icons(False)
-        if hasattr(self, "_total_stats_action"):
-            self._total_stats_action.blockSignals(True)
-            try:
-                self._total_stats_action.setChecked(False)
-            finally:
-                self._total_stats_action.blockSignals(False)
+        self._sync_total_stats_controls(False)
         if hasattr(self, "_stat_icons_action"):
             self._stat_icons_action.blockSignals(True)
             try:

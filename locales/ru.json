@@ -119,6 +119,8 @@
   "header.summary": "Дома: {placed}  |  Приключается: {adv}  |  Выбыл: {gone}",
   "header.search_placeholder": "Поиск котов, способностей, мутаций…",
   "header.pin_toggle_tooltip": "Показать только закреплённых котов",
+  "header.total_stats_toggle": "Текущие статы",
+  "header.total_stats_toggle_tooltip": "Показывать текущие характеристики (с учётом травм, мутаций и других модификаторов) вместо врождённых (Ctrl+T)",
   "bulk.label_template": "{label}: {state}",
   "bulk.breeding_block": "Блокировка разведения",
   "bulk.must_breed": "Обязательно к разведению",

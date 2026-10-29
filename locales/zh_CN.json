@@ -119,6 +119,8 @@
   "header.summary": "在家: {placed}  |  外出: {adv}  |  离开: {gone}",
   "header.search_placeholder": "搜索猫咪、能力、变异…",
   "header.pin_toggle_tooltip": "仅显示已固定的猫",
+  "header.total_stats_toggle": "有效属性",
+  "header.total_stats_toggle_tooltip": "显示有效属性（包含伤病、突变及其他修正）而非出生属性 (Ctrl+T)",
   "bulk.label_template": "{label}: {state}",
   "bulk.breeding_block": "禁止育种",
   "bulk.must_breed": "必须育种",

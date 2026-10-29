@@ -119,6 +119,8 @@
   "header.summary": "Dom: {placed}  |  Przygoda: {adv}  |  Odeszłe: {gone}",
   "header.search_placeholder": "Szukaj kotów, zdolności, mutacji…",
   "header.pin_toggle_tooltip": "Pokazuj tylko przypięte koty",
+  "header.total_stats_toggle": "Efektywne statystyki",
+  "header.total_stats_toggle_tooltip": "Pokazuj efektywne statystyki (z uwzględnieniem obrażeń, mutacji i innych modyfikatorów) zamiast statystyk z urodzenia (Ctrl+T)",
   "bulk.label_template": "{label}: {state}",
   "bulk.breeding_block": "Blokada hodowlana",
   "bulk.must_breed": "Musi hodować",

@@ -128,6 +128,8 @@
   "header.filter.abilities": "Abilities",
   "header.filter.mutations": "Mutations",
   "header.pin_toggle_tooltip": "Show only pinned cats",
+  "header.total_stats_toggle": "Effective Stats",
+  "header.total_stats_toggle_tooltip": "Show effective stats (including injuries, mutations and other modifiers) instead of birth stats (Ctrl+T)",
   "bulk.label_template": "{label}: {state}",
   "bulk.breeding_block": "Breeding Block",
   "bulk.must_breed": "Must Breed",
