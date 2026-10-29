@@ -860,11 +860,15 @@ class CatTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return COLUMNS[section]
-        if orientation == Qt.Horizontal and role == Qt.ToolTipRole and section == COL_TAGS:
-            return _tr(
-                "table.tooltip.tags",
-                default="Game tag first, then custom tags, shown as icons.",
-            )
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole and section in (COL_TAGS, COL_ROOM, COL_STAT):
+            filter_hint = _tr("table.tooltip.right_click_filter", default="Right-click to filter by value.")
+            if section == COL_TAGS:
+                tags_tip = _tr(
+                    "table.tooltip.tags",
+                    default="Game tag first, then custom tags, shown as icons.",
+                )
+                return f"{tags_tip}\n{filter_hint}"
+            return filter_hint
         if orientation == Qt.Horizontal and role == Qt.ToolTipRole and section == COL_ADV:
             return _tr(
                 "table.tooltip.adventure_ready",

@@ -2,10 +2,14 @@
 from PySide6.QtCore import Qt, QSortFilterProxyModel
 
 from save_parser import Cat
-from mewgenics.constants import COL_ABIL, COL_MUTS
-from mewgenics.utils.tags import _cat_tags
+from mewgenics.constants import COL_ABIL, COL_MUTS, COL_TAGS, COL_ROOM, COL_STAT
+from mewgenics.utils.tags import _cat_tags, _cat_tag_labels
 from mewgenics.utils.cat_analysis import _is_exceptional_breeder, _is_donation_candidate, _relations_summary
 from mewgenics.utils.abilities import _mutation_display_name
+
+# Columns that support the right-click "filter by value" header popup.
+VALUE_FILTER_COLUMNS = (COL_TAGS, COL_ROOM, COL_STAT)
+EMPTY_FILTER_VALUE = "—"
 
 
 class RoomFilterModel(QSortFilterProxyModel):
@@ -17,6 +21,7 @@ class RoomFilterModel(QSortFilterProxyModel):
         self._mutations_filter = ""
         self._pinned_only = False
         self._tag_filter: set[str] = set()  # empty = show all
+        self._column_value_filters: dict[int, set[str]] = {}  # column -> allowed display values
         self._sort_columns: list[tuple[int, Qt.SortOrder]] = []  # list of (column, order) for multi-column sort
         self._accessible_cat_keys: set[int] = set()
         self.setSortRole(Qt.UserRole)
@@ -52,6 +57,55 @@ class RoomFilterModel(QSortFilterProxyModel):
     def set_tag_filter(self, tag_ids: set[str]):
         self._tag_filter = tag_ids
         self.invalidate()
+
+    @property
+    def column_value_filters(self) -> dict[int, set[str]]:
+        return {col: set(values) for col, values in self._column_value_filters.items()}
+
+    def set_column_value_filter(self, column: int, values: set[str]):
+        """Show only rows whose value in *column* is one of *values* (empty = no filter)."""
+        values = set(values or ())
+        if values:
+            self._column_value_filters[column] = values
+        else:
+            self._column_value_filters.pop(column, None)
+        self.invalidate()
+
+    def clear_column_value_filters(self):
+        if self._column_value_filters:
+            self._column_value_filters.clear()
+            self.invalidate()
+
+    def column_filter_values_for_row(self, source_row: int, column: int) -> list[str]:
+        """Values a source row contributes to a value-filtered column.
+
+        Tags is multi-valued (game tag + custom tags); other columns use
+        their display text.
+        """
+        source_model = self.sourceModel()
+        if source_model is None:
+            return []
+        if column == COL_TAGS:
+            cat = source_model.cat_at(source_row)
+            if cat is None:
+                return []
+            return _cat_tag_labels(cat) or [EMPTY_FILTER_VALUE]
+        value = source_model.data(source_model.index(source_row, column), Qt.DisplayRole)
+        text = str(value or "").strip()
+        return [text or EMPTY_FILTER_VALUE]
+
+    def available_column_values(self, column: int) -> list[str]:
+        """Values present in rows that pass every filter except this column's own.
+
+        Currently-selected values are always included so they can be unchecked.
+        """
+        source_model = self.sourceModel()
+        values: set[str] = set(self._column_value_filters.get(column, ()))
+        if source_model is not None:
+            for row in range(source_model.rowCount()):
+                if self._accepts_row(row, ignore_column=column):
+                    values.update(self.column_filter_values_for_row(row, column))
+        return sorted(values, key=lambda v: (v == EMPTY_FILTER_VALUE, v.lower()))
 
     def set_sort_columns(self, columns: list[tuple[int, Qt.SortOrder]]):
         """Set multi-column sort order. columns is a list of (column_index, order) tuples."""
@@ -97,6 +151,9 @@ class RoomFilterModel(QSortFilterProxyModel):
         return str(value or "").lower()
 
     def filterAcceptsRow(self, source_row, source_parent):
+        return self._accepts_row(source_row)
+
+    def _accepts_row(self, source_row: int, ignore_column: int | None = None) -> bool:
         cat = self.sourceModel().cat_at(source_row)
         if cat is None:
             return False
@@ -107,6 +164,11 @@ class RoomFilterModel(QSortFilterProxyModel):
         if self._tag_filter:
             cat_tags = set(_cat_tags(cat))
             if not (cat_tags & self._tag_filter):
+                return False
+        for column, allowed in self._column_value_filters.items():
+            if column == ignore_column:
+                continue
+            if not allowed.intersection(self.column_filter_values_for_row(source_row, column)):
                 return False
         if self._room == "__all__":
             return True

@@ -106,7 +106,7 @@ from mewgenics.models.cat_table_model import (
     TagStripDelegate, CatTableModel, VisualIconDelegate,
     clear_cat_sprite_cache, clear_mutation_part_cache,
 )
-from mewgenics.models.room_filter_model import RoomFilterModel
+from mewgenics.models.room_filter_model import RoomFilterModel, VALUE_FILTER_COLUMNS
 from mewgenics.workers.save_loader import SaveLoadWorker
 from mewgenics.workers.room_refresh import QuickRoomRefreshWorker
 
@@ -121,6 +121,7 @@ from mewgenics.dialogs import (
     WhatsNewDialog,
 )
 from mewgenics.panels.cat_detail import CatDetailPanel
+from mewgenics.panels.column_filter_popup import ColumnFilterHeader, ColumnValueFilterPopup
 
 from mewgenics.views.family_tree import FamilyTreeBrowserView
 from mewgenics.views.safe_breeding import SafeBreedingView
@@ -1317,6 +1318,9 @@ class MainWindow(QMainWindow):
         self._search.setPlaceholderText(_tr("header.search_placeholder"))
         self._fight_club_abilities_filter.setPlaceholderText(_tr("header.filter.abilities", default="Abilities"))
         self._fight_club_mutations_filter.setPlaceholderText(_tr("header.filter.mutations", default="Mutations"))
+        # Column value filters hold display text, which is about to change language.
+        self._proxy_model.clear_column_value_filters()
+        self._column_filter_header.set_active_columns(())
         self._total_stats_btn.setText(_tr("header.total_stats_toggle", default="Effective Stats"))
         self._total_stats_btn.setToolTip(_tr(
             "header.total_stats_toggle_tooltip",
@@ -1569,6 +1573,10 @@ class MainWindow(QMainWindow):
         self._proxy_model.rowsRemoved.connect(self._update_count)
 
         self._table = QTableView()
+        # Right-click on Tags/Room/Status headers opens a value filter popup.
+        self._column_filter_header = ColumnFilterHeader(VALUE_FILTER_COLUMNS, self._table)
+        self._column_filter_header.filterRequested.connect(self._show_column_value_filter)
+        self._table.setHorizontalHeader(self._column_filter_header)
         self._table.setModel(self._proxy_model)
         self._table.setProperty("_keep_adv_ready_last", True)
         self._table.setProperty("_keep_tags_first", True)
@@ -3396,6 +3404,23 @@ class MainWindow(QMainWindow):
                 " border-radius:4px; padding:3px 10px; font-size:11px; font-weight:bold; }"
                 "QPushButton:hover { background:#252545; color:#ddd; }"
                 "QPushButton::menu-indicator { image:none; }")
+
+    def _show_column_value_filter(self, column: int, global_pos):
+        title = str(self._source_model.headerData(column, Qt.Horizontal, Qt.DisplayRole) or "").strip()
+        popup = ColumnValueFilterPopup(
+            title or _tr("table.column.tags", default="Tags"),
+            self._proxy_model.available_column_values(column),
+            self._proxy_model.column_value_filters.get(column, set()),
+            self,
+        )
+        popup.valuesChanged.connect(lambda values, col=column: self._set_column_value_filter(col, values))
+        popup.popup_at(global_pos)
+
+    def _set_column_value_filter(self, column: int, values: set[str]):
+        self._proxy_model.set_column_value_filter(column, values)
+        self._column_filter_header.set_active_columns(self._proxy_model.column_value_filters.keys())
+        self._update_count()
+        self._refresh_bulk_view_buttons()
 
     def _refresh_views_for_tag_filter(self):
         """Push tag-filtered cat list to secondary views."""
