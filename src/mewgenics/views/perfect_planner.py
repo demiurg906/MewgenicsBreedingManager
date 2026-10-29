@@ -194,6 +194,9 @@ def _planner_trait_summary_for_pair(cat_a: Cat, cat_b: Cat, traits: Sequence[dic
 
 
 class PerfectPlannerDetailPanel(QWidget):
+    # Target, 7s, Risk%, Why, Children, Rotate
+    ACTIONS_COLUMN_COUNT = 6
+
     def __init__(self):
         super().__init__()
         self.setStyleSheet("background:#0a0a18; border-top:1px solid #1e1e38;")
@@ -212,12 +215,10 @@ class PerfectPlannerDetailPanel(QWidget):
         self._context.hide()
         root.addWidget(self._context)
 
-        self._actions_table = QTableWidget(0, 3)
-        self._actions_table.setHorizontalHeaderLabels([
-            _tr("perfect_planner.detail.table.target", default="Target"),
-            _tr("perfect_planner.table.coverage", default="7s"),
-            _tr("perfect_planner.table.risk", default="Risk%"),
-        ])
+        self._actions_table = QTableWidget(0, self.ACTIONS_COLUMN_COUNT)
+        # Bumped when the column set changes so stale saved header layouts are ignored.
+        self._actions_table.setProperty("_table_state_version", 2)
+        self._actions_table.setHorizontalHeaderLabels(self._actions_headers())
         self._actions_table.verticalHeader().setVisible(False)
         self._actions_table.setSelectionMode(QAbstractItemView.NoSelection)
         self._actions_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -226,12 +227,9 @@ class PerfectPlannerDetailPanel(QWidget):
         self._actions_table.setAlternatingRowColors(True)
         self._actions_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         hh = self._actions_table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.Interactive)
-        hh.setSectionResizeMode(1, QHeaderView.Interactive)
-        hh.setSectionResizeMode(2, QHeaderView.Interactive)
-        self._actions_table.setColumnWidth(0, 450)
-        self._actions_table.setColumnWidth(1, 52)
-        self._actions_table.setColumnWidth(2, 52)
+        for col, width in enumerate((450, 52, 52, 280, 240, 240)):
+            hh.setSectionResizeMode(col, QHeaderView.Interactive)
+            self._actions_table.setColumnWidth(col, width)
         self._actions_table.verticalHeader().setDefaultSectionSize(24)
         self._actions_table.setStyleSheet("""
             QTableWidget {
@@ -287,12 +285,19 @@ class PerfectPlannerDetailPanel(QWidget):
         """)
         root.addWidget(self._excluded_table, 1)
 
-    def retranslate_ui(self):
-        self._actions_table.setHorizontalHeaderLabels([
+    @staticmethod
+    def _actions_headers() -> list[str]:
+        return [
             _tr("perfect_planner.detail.table.target", default="Target"),
             _tr("perfect_planner.table.coverage", default="7s"),
             _tr("perfect_planner.table.risk", default="Risk%"),
-        ])
+            _tr("perfect_planner.detail.table.why", default="Why"),
+            _tr("perfect_planner.detail.table.children", default="Children"),
+            _tr("perfect_planner.detail.table.rotate", default="Rotate"),
+        ]
+
+    def retranslate_ui(self):
+        self._actions_table.setHorizontalHeaderLabels(self._actions_headers())
         self._excluded_table.setHorizontalHeaderLabels([
             _tr("perfect_planner.detail.excluded.cat"), "STR", "DEX", "CON", "INT", "SPD", "CHA", "LCK",
             _tr("perfect_planner.detail.excluded.sum"),
@@ -515,6 +520,12 @@ class PerfectPlannerDetailPanel(QWidget):
                 self._actions_table.setItem(row, 0, target_item)
             self._actions_table.setItem(row, 1, coverage_item)
             self._actions_table.setItem(row, 2, risk_item)
+            for col, key in ((3, "why"), (4, "children"), (5, "rotate")):
+                text = str(action.get(key, "") or "")
+                text_item = QTableWidgetItem(text)
+                text_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                text_item.setToolTip(text)
+                self._actions_table.setItem(row, col, text_item)
 
         self._actions_table.resizeRowsToContents()
 
@@ -2435,6 +2446,7 @@ class PerfectCatPlannerView(QWidget):
             "splitter_sizes": list(self._splitter.sizes()) if hasattr(self, "_splitter") else [],
             "bottom_splitter_sizes": list(self._bottom_splitter.sizes()) if hasattr(self, "_bottom_splitter") else [],
             "actions_table_header_state": actions_table_header_state,
+            "actions_table_columns": PerfectPlannerDetailPanel.ACTIONS_COLUMN_COUNT,
         })
         if has_run is not None:
             state["has_run"] = bool(has_run)
@@ -2672,7 +2684,8 @@ class PerfectCatPlannerView(QWidget):
                     max(10, int(bottom_splitter_sizes[1] or 0)),
                 ])
             actions_table_header_state = state.get("actions_table_header_state", "")
-            if isinstance(actions_table_header_state, str) and actions_table_header_state:
+            same_columns = state.get("actions_table_columns") == PerfectPlannerDetailPanel.ACTIONS_COLUMN_COUNT
+            if same_columns and isinstance(actions_table_header_state, str) and actions_table_header_state:
                 try:
                     self._details_pane._actions_table.horizontalHeader().restoreState(
                         QByteArray.fromBase64(actions_table_header_state.encode("ascii"))

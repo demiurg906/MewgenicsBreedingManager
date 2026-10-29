@@ -393,9 +393,11 @@ class TagStripDelegate(QStyledItemDelegate):
             pixmap = pixmap.pixmap(r.size())
         if hasattr(pixmap, "size") and pixmap.size().isValid():
             _dpr = pixmap.devicePixelRatio() or 1.0
+            logical_w = int(pixmap.width() / _dpr)
             logical_h = int(pixmap.height() / _dpr)
             draw_y = r.center().y() - logical_h // 2
-            draw_x = r.left() + self._PAD_LEFT
+            # Center like the "—" placeholder; left-align if the strip overflows the cell.
+            draw_x = max(r.left() + self._PAD_LEFT, r.left() + (r.width() - logical_w) // 2)
             painter.drawPixmap(draw_x, draw_y, pixmap)
         painter.restore()
 

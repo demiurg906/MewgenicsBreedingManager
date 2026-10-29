@@ -1074,7 +1074,7 @@ def test_planner_view_uses_split_layout_and_tabs(qt_app, planner_config):
         view._details_pane._actions_table.horizontalHeaderItem(i).text()
         for i in range(view._details_pane._actions_table.columnCount())
     ]
-    assert headers == ["Target", "7s", "Risk%"]
+    assert headers == ["Target", "7s", "Risk%", "Why", "Children", "Rotate"]
     assert view._table.columnWidth(0) >= 98
     assert view._table.columnWidth(1) >= 260
     assert view._table.columnWidth(5) >= 320
@@ -1091,6 +1091,43 @@ def test_planner_detail_target_width_persists(qt_app, planner_config):
 
     view2 = mm.PerfectCatPlannerView()
     assert view2._details_pane._actions_table.columnWidth(0) == 138
+
+
+def test_planner_detail_shows_why_children_rotate_text(qt_app):
+    from mewgenics.views.perfect_planner import PerfectPlannerDetailPanel
+    pane = PerfectPlannerDetailPanel()
+    pane.show_stage({
+        "stage": "Stage 1",
+        "actions": [{
+            "target": "Alpha x Bravo",
+            "coverage_value": 3.8,
+            "risk": 0.0,
+            "why": "Fast foundation pair for a perfect-7 line.",
+            "children": "Keep the strongest son and daughter.",
+            "rotate": "Stay on this pair until the line stops improving.",
+        }],
+    })
+    table = pane._actions_table
+    assert [table.item(0, col).text() for col in (3, 4, 5)] == [
+        "Fast foundation pair for a perfect-7 line.",
+        "Keep the strongest son and daughter.",
+        "Stay on this pair until the line stops improving.",
+    ]
+    assert table.item(0, 3).toolTip() == "Fast foundation pair for a perfect-7 line."
+
+
+def test_planner_detail_ignores_header_state_from_old_column_set(qt_app, planner_config):
+    view = mm.PerfectCatPlannerView()
+    view._details_pane._actions_table.setColumnWidth(0, 138)
+    view._save_session_state()
+    state = mm._load_ui_state("perfect_planner_state")
+    state.pop("actions_table_columns")  # layout saved before Why/Children/Rotate existed
+    mm._save_ui_state("perfect_planner_state", state)
+
+    view2 = mm.PerfectCatPlannerView()
+    table = view2._details_pane._actions_table
+    assert table.columnWidth(0) == 450
+    assert table.columnWidth(3) == 280
 
 
 def test_cat_locator_includes_offspring_and_pair_colors(qt_app):
