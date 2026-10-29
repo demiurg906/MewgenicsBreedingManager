@@ -24,6 +24,7 @@ class RoomFilterModel(QSortFilterProxyModel):
         self._column_value_filters: dict[int, set[str]] = {}  # column -> allowed display values
         self._sort_columns: list[tuple[int, Qt.SortOrder]] = []  # list of (column, order) for multi-column sort
         self._accessible_cat_keys: set[int] = set()
+        self._allowed_keys: set[int] | None = None  # None = no restriction
         self.setSortRole(Qt.UserRole)
 
     def set_room(self, key):
@@ -33,6 +34,15 @@ class RoomFilterModel(QSortFilterProxyModel):
     def set_accessible_cats(self, keys: set[int]):
         self._accessible_cat_keys = set(keys or [])
         self.invalidate()
+
+    def set_allowed_keys(self, keys: set[int] | None):
+        """Restrict rows to cats whose db_key is in *keys* (None = no restriction)."""
+        self._allowed_keys = None if keys is None else set(keys)
+        self.invalidate()
+
+    @property
+    def allowed_keys(self) -> set[int] | None:
+        return None if self._allowed_keys is None else set(self._allowed_keys)
 
     def set_name_filter(self, text: str):
         self._name_filter = text.strip().lower()
@@ -156,6 +166,8 @@ class RoomFilterModel(QSortFilterProxyModel):
     def _accepts_row(self, source_row: int, ignore_column: int | None = None) -> bool:
         cat = self.sourceModel().cat_at(source_row)
         if cat is None:
+            return False
+        if self._allowed_keys is not None and cat.db_key not in self._allowed_keys:
             return False
         if not self._matches_text_filter(cat):
             return False

@@ -83,7 +83,11 @@ def _restore_table_view_state(widget: QWidget):
         return
     header = widget.horizontalHeader()
     key = _table_view_state_key(widget)
-    state = _load_table_view_states().get(key)
+    states = _load_table_view_states()
+    state = states.get(key)
+    legacy_key = widget.property("_table_state_legacy_key")
+    if not isinstance(state, dict) and legacy_key:
+        state = states.get(str(legacy_key))
     if not isinstance(state, dict):
         return
     expected_version = widget.property("_table_state_version")

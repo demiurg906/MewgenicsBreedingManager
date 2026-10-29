@@ -122,6 +122,7 @@ from mewgenics.dialogs import (
 )
 from mewgenics.panels.cat_detail import CatDetailPanel
 from mewgenics.panels.column_filter_popup import ColumnFilterHeader, ColumnValueFilterPopup
+from mewgenics.utils.table_state import _table_view_state_key
 
 from mewgenics.views.family_tree import FamilyTreeBrowserView
 from mewgenics.views.safe_breeding import SafeBreedingView
@@ -903,6 +904,7 @@ class MainWindow(QMainWindow):
             self._table.viewport().update()
         clear_cat_sprite_cache()
         clear_mutation_part_cache()
+        self._queue_children_layout_sync()
 
     # ── Layout ────────────────────────────────────────────────────────────
 
@@ -922,6 +924,12 @@ class MainWindow(QMainWindow):
         hs.setStretchFactor(0, 0)
         hs.setStretchFactor(1, 1)
         hs.setSizes([190, 1250])
+        # The main table used to sit directly in the detail splitter; fall back
+        # to that key so saved column layouts survive the children splitter.
+        self._table.setProperty(
+            "_table_state_legacy_key",
+            _table_view_state_key(self._detail_splitter) + "/QTableView",
+        )
         _enforce_min_font_in_widget_tree(central)
         # Snapshot all stylesheet font sizes before any offset is applied,
         # so _apply_font_offset_to_tree always scales from the true originals.
@@ -1319,8 +1327,15 @@ class MainWindow(QMainWindow):
         self._fight_club_abilities_filter.setPlaceholderText(_tr("header.filter.abilities", default="Abilities"))
         self._fight_club_mutations_filter.setPlaceholderText(_tr("header.filter.mutations", default="Mutations"))
         # Column value filters hold display text, which is about to change language.
-        self._proxy_model.clear_column_value_filters()
-        self._column_filter_header.set_active_columns(())
+        for table in (self._table, self._children_table):
+            table.model().clear_column_value_filters()
+            table.horizontalHeader().set_active_columns(())
+        self._children_btn.setText(_tr("header.children_toggle", default="Children"))
+        self._children_btn.setToolTip(_tr(
+            "header.children_toggle_tooltip",
+            default="Show the children of the selected cat in a second table",
+        ))
+        self._update_children_title()
         self._total_stats_btn.setText(_tr("header.total_stats_toggle", default="Effective Stats"))
         self._total_stats_btn.setToolTip(_tr(
             "header.total_stats_toggle_tooltip",
@@ -1506,6 +1521,19 @@ class MainWindow(QMainWindow):
             "QPushButton:checked { background:#2a2a5a; color:#eee; border-color:#4a4a8a; }")
         self._pin_toggle.toggled.connect(self._on_pin_toggle)
 
+        self._children_btn = QPushButton(_tr("header.children_toggle", default="Children"))
+        self._children_btn.setCheckable(True)
+        self._children_btn.setToolTip(_tr(
+            "header.children_toggle_tooltip",
+            default="Show the children of the selected cat in a second table",
+        ))
+        self._children_btn.setStyleSheet(
+            "QPushButton { background:#1a1a32; color:#aaa; border:1px solid #2a2a4a;"
+            " border-radius:4px; padding:4px 10px; font-size:11px; font-weight:bold; }"
+            "QPushButton:hover { background:#252545; color:#ddd; }"
+            "QPushButton:checked { background:#2a2a5a; color:#eee; border-color:#4a4a8a; }")
+        self._children_btn.toggled.connect(self._toggle_children_view)
+
         self._total_stats_btn = QPushButton(_tr("header.total_stats_toggle", default="Effective Stats"))
         self._total_stats_btn.setCheckable(True)
         self._total_stats_btn.setChecked(_saved_total_stats_display())
@@ -1537,6 +1565,8 @@ class MainWindow(QMainWindow):
         hb.addWidget(self._room_actions_box)
         hb.addSpacing(8)
         hb.addWidget(bulk_container)
+        hb.addSpacing(8)
+        hb.addWidget(self._children_btn)
         hb.addSpacing(10)
         hb.addWidget(self._total_stats_btn)
         hb.addSpacing(4)
@@ -1572,117 +1602,9 @@ class MainWindow(QMainWindow):
         self._proxy_model.rowsInserted.connect(self._update_count)
         self._proxy_model.rowsRemoved.connect(self._update_count)
 
-        self._table = QTableView()
-        # Right-click on Tags/Room/Status headers opens a value filter popup.
-        self._column_filter_header = ColumnFilterHeader(VALUE_FILTER_COLUMNS, self._table)
-        self._column_filter_header.filterRequested.connect(self._show_column_value_filter)
-        self._table.setHorizontalHeader(self._column_filter_header)
-        self._table.setModel(self._proxy_model)
-        self._table.setProperty("_keep_adv_ready_last", True)
-        self._table.setProperty("_keep_tags_first", True)
-        self._table.setProperty("_min_tags_width", 122)
-        self._table.setProperty("_table_state_version", 2)
-        self._table.setSortingEnabled(True)
-        self._table.sortByColumn(COL_NAME, Qt.AscendingOrder)
-        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self._table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self._table.setAlternatingRowColors(True)
-        self._table.verticalHeader().setVisible(False)
-        self._table.setShowGrid(False)
-        self._table.setWordWrap(False)
-        # Checkbox columns are toggled explicitly in _on_table_clicked.
-        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        hh = self._table.horizontalHeader()
-        hh.setStretchLastSection(False)  # we control stretch manually
-
-        # Name: interactive so the user can resize it; not Stretch so it
-        # doesn't eat the blank space that should sit at the right edge.
-        hh.setSectionResizeMode(COL_TAGS, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_TAGS, self._base_col_widths[COL_TAGS])
-
-        hh.setSectionResizeMode(COL_NAME, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_NAME, self._base_col_widths[COL_NAME])
-        self._tag_strip_delegate = TagStripDelegate(self._table)
-        self._table.setItemDelegateForColumn(COL_TAGS, self._tag_strip_delegate)
-
-        # Visual-mode delegates: these forward to the default text
-        # rendering in compact mode, and paint icons in visual mode.
-        self._abilities_visual_delegate = VisualIconDelegate("abilities", self._table)
-        self._mutations_visual_delegate = VisualIconDelegate("mutations", self._table)
-        self._table.setItemDelegateForColumn(COL_ABIL, self._abilities_visual_delegate)
-        self._table.setItemDelegateForColumn(COL_MUTS, self._mutations_visual_delegate)
-
-        # Room: size to content so it adapts to room name length
-        hh.setSectionResizeMode(COL_ROOM, QHeaderView.ResizeToContents)
-
-        # Narrow columns keep today's defaults but can now be widened for translated text.
-        for col, width in [
-            (COL_GEN, _W_GEN),
-            (COL_STAT, _W_STATUS),
-            (COL_ADV, 72),
-            (COL_BL, 34),
-            (COL_MB, 34),
-            (COL_PIN, 34),
-            (COL_SUM, 38),
-            (COL_AGG, _W_TRAIT_NARROW),
-            (COL_LIB, _W_TRAIT_NARROW),
-            (COL_INBRD, _W_TRAIT_NARROW),
-            (COL_SEXUALITY, _W_TRAIT),
-        ] + [(c, _W_STAT) for c in STAT_COLS]:
-            hh.setSectionResizeMode(col, QHeaderView.Interactive)
-            self._table.setColumnWidth(col, width)
-
-        # Abilities: interactive — user drags to taste
-        hh.setSectionResizeMode(COL_ABIL, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_ABIL, self._base_col_widths[COL_ABIL])
-
-        # Mutations: interactive
-        hh.setSectionResizeMode(COL_MUTS, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_MUTS, self._base_col_widths[COL_MUTS])
-
-        # Relations: interactive
-        hh.setSectionResizeMode(COL_RELNS, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_RELNS, self._base_col_widths[COL_RELNS])
-
-        # Narrow auxiliary columns keep their defaults but can be widened manually.
-        hh.setSectionResizeMode(COL_REL, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_REL, self._base_col_widths[COL_REL])
-
-        hh.setSectionResizeMode(COL_AGE, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_AGE, self._base_col_widths[COL_AGE])
-
-        hh.setSectionResizeMode(COL_GEN_DEPTH, QHeaderView.Interactive)
-        self._table.setColumnWidth(COL_GEN_DEPTH, _W_GEN)
-        self._table.setColumnHidden(COL_GEN_DEPTH, True)
-
-        # Source: Stretch — absorbs blank space, hidden by default (behind lineage toggle)
-        hh.setSectionResizeMode(COL_SRC, QHeaderView.Stretch)
-        self._table.setColumnHidden(COL_SRC, True)
-        self._table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self._table.customContextMenuRequested.connect(self._on_table_context_menu)
-
-        self._table.setStyleSheet("""
-            QTableView {
-                background:#0d0d1c; alternate-background-color:#131326;
-                color:#ddd; border:none; font-size:12px;
-                selection-background-color:#1e3060;
-            }
-            QTableView::item { padding:3px 4px; }
-            QTableView::item:selected { color:#fff; }
-            QHeaderView::section {
-                background:#16213e; color:#888; padding:5px 4px;
-                border:none; border-bottom:1px solid #1e1e38;
-                border-right:1px solid #2a2a50;
-                font-size:11px; font-weight:bold;
-            }
-            QScrollBar:vertical { background:#0d0d1c; width:10px; }
-            QScrollBar::handle:vertical {
-                background:#252545; border-radius:5px; min-height:20px;
-            }
-        """)
-
-        self._table.selectionModel().selectionChanged.connect(self._on_selection)
-        self._table.clicked.connect(self._on_table_clicked)
+        self._table = self._create_cat_table(self._proxy_model)
+        self._column_filter_header = self._table.horizontalHeader()
+        self._active_cat_table = self._table
         self._search.textChanged.connect(self._proxy_model.set_name_filter)
         self._search.textChanged.connect(self._update_count)
         self._search.textChanged.connect(lambda _: self._refresh_bulk_view_buttons())
@@ -1692,7 +1614,49 @@ class MainWindow(QMainWindow):
         self._fight_club_mutations_filter.textChanged.connect(self._proxy_model.set_mutations_filter)
         self._fight_club_mutations_filter.textChanged.connect(self._update_count)
         self._fight_club_mutations_filter.textChanged.connect(lambda _: self._refresh_bulk_view_buttons())
-        vs.addWidget(self._table)
+
+        # Children table: same roster table, restricted to offspring of the
+        # cats selected in the main table. Shown beside it in Children mode.
+        self._children_mode = False
+        self._children_parent_keys: list[int] = []
+        self._children_proxy = RoomFilterModel()
+        self._children_proxy.setSourceModel(self._source_model)
+        self._children_proxy.set_room("__all__")
+        self._children_proxy.set_allowed_keys(set())
+        self._children_table = self._create_cat_table(self._children_proxy)
+        for signal in (self._children_proxy.modelReset, self._children_proxy.layoutChanged,
+                       self._children_proxy.rowsInserted, self._children_proxy.rowsRemoved):
+            signal.connect(self._update_children_title)
+        self._source_model.modelReset.connect(self._refresh_children_table)
+        self._children_panel = QWidget()
+        children_vb = QVBoxLayout(self._children_panel)
+        children_vb.setContentsMargins(0, 0, 0, 0)
+        children_vb.setSpacing(0)
+        self._children_title_lbl = QLabel("")
+        self._children_title_lbl.setStyleSheet(
+            "QLabel { background:#16213e; color:#aab; padding:4px 8px; font-size:11px; font-weight:bold;"
+            " border-bottom:1px solid #2a2a50; }")
+        children_vb.addWidget(self._children_title_lbl)
+        children_vb.addWidget(self._children_table)
+        self._children_panel.setVisible(False)
+        self._children_layout_timer = QTimer(self)
+        self._children_layout_timer.setSingleShot(True)
+        self._children_layout_timer.setInterval(100)
+        self._children_layout_timer.timeout.connect(self._sync_children_table_layout)
+        self._column_filter_header.sectionResized.connect(self._queue_children_layout_sync)
+        self._column_filter_header.sectionMoved.connect(self._queue_children_layout_sync)
+
+        cs = QSplitter(Qt.Horizontal)
+        cs.setObjectName("main_window_children_splitter")
+        cs.setHandleWidth(4)
+        cs.setChildrenCollapsible(False)
+        cs.setStyleSheet("QSplitter::handle:horizontal { background:#1e1e38; }")
+        cs.addWidget(self._table)
+        cs.addWidget(self._children_panel)
+        cs.setStretchFactor(0, 1)
+        cs.setStretchFactor(1, 1)
+        self._children_splitter = cs
+        vs.addWidget(cs)
 
         # Detail panel
         self._detail = CatDetailPanel()
@@ -1731,10 +1695,148 @@ class MainWindow(QMainWindow):
 
     # ── Selection → detail ────────────────────────────────────────────────
 
+    def _create_cat_table(self, proxy: RoomFilterModel) -> QTableView:
+        """Build a cat roster table over *proxy* with the shared roster setup."""
+        table = QTableView()
+        # Right-click on Tags/Room/Status headers opens a value filter popup.
+        header = ColumnFilterHeader(VALUE_FILTER_COLUMNS, table)
+        header.filterRequested.connect(lambda col, pos, t=table: self._show_column_value_filter(t, col, pos))
+        table.setHorizontalHeader(header)
+        table.setModel(proxy)
+        table.setProperty("_keep_adv_ready_last", True)
+        table.setProperty("_keep_tags_first", True)
+        table.setProperty("_min_tags_width", 122)
+        table.setProperty("_table_state_version", 2)
+        table.setSortingEnabled(True)
+        table.sortByColumn(COL_NAME, Qt.AscendingOrder)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.setShowGrid(False)
+        table.setWordWrap(False)
+        # Checkbox columns are toggled explicitly in _on_table_clicked.
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        hh = table.horizontalHeader()
+        hh.setStretchLastSection(False)  # we control stretch manually
+
+        # Name: interactive so the user can resize it; not Stretch so it
+        # doesn't eat the blank space that should sit at the right edge.
+        hh.setSectionResizeMode(COL_TAGS, QHeaderView.Interactive)
+        table.setColumnWidth(COL_TAGS, self._base_col_widths[COL_TAGS])
+
+        hh.setSectionResizeMode(COL_NAME, QHeaderView.Interactive)
+        table.setColumnWidth(COL_NAME, self._base_col_widths[COL_NAME])
+        tag_strip_delegate = TagStripDelegate(table)
+        table.setItemDelegateForColumn(COL_TAGS, tag_strip_delegate)
+
+        # Visual-mode delegates: these forward to the default text
+        # rendering in compact mode, and paint icons in visual mode.
+        abilities_visual_delegate = VisualIconDelegate("abilities", table)
+        mutations_visual_delegate = VisualIconDelegate("mutations", table)
+        table.setItemDelegateForColumn(COL_ABIL, abilities_visual_delegate)
+        table.setItemDelegateForColumn(COL_MUTS, mutations_visual_delegate)
+        # Keep Python wrappers alive alongside the view.
+        table._cat_delegates = (tag_strip_delegate, abilities_visual_delegate, mutations_visual_delegate)
+
+        # Room: size to content so it adapts to room name length
+        hh.setSectionResizeMode(COL_ROOM, QHeaderView.ResizeToContents)
+
+        # Narrow columns keep today's defaults but can now be widened for translated text.
+        for col, width in [
+            (COL_GEN, _W_GEN),
+            (COL_STAT, _W_STATUS),
+            (COL_ADV, 72),
+            (COL_BL, 34),
+            (COL_MB, 34),
+            (COL_PIN, 34),
+            (COL_SUM, 38),
+            (COL_AGG, _W_TRAIT_NARROW),
+            (COL_LIB, _W_TRAIT_NARROW),
+            (COL_INBRD, _W_TRAIT_NARROW),
+            (COL_SEXUALITY, _W_TRAIT),
+        ] + [(c, _W_STAT) for c in STAT_COLS]:
+            hh.setSectionResizeMode(col, QHeaderView.Interactive)
+            table.setColumnWidth(col, width)
+
+        # Abilities: interactive — user drags to taste
+        hh.setSectionResizeMode(COL_ABIL, QHeaderView.Interactive)
+        table.setColumnWidth(COL_ABIL, self._base_col_widths[COL_ABIL])
+
+        # Mutations: interactive
+        hh.setSectionResizeMode(COL_MUTS, QHeaderView.Interactive)
+        table.setColumnWidth(COL_MUTS, self._base_col_widths[COL_MUTS])
+
+        # Relations: interactive
+        hh.setSectionResizeMode(COL_RELNS, QHeaderView.Interactive)
+        table.setColumnWidth(COL_RELNS, self._base_col_widths[COL_RELNS])
+
+        # Narrow auxiliary columns keep their defaults but can be widened manually.
+        hh.setSectionResizeMode(COL_REL, QHeaderView.Interactive)
+        table.setColumnWidth(COL_REL, self._base_col_widths[COL_REL])
+
+        hh.setSectionResizeMode(COL_AGE, QHeaderView.Interactive)
+        table.setColumnWidth(COL_AGE, self._base_col_widths[COL_AGE])
+
+        hh.setSectionResizeMode(COL_GEN_DEPTH, QHeaderView.Interactive)
+        table.setColumnWidth(COL_GEN_DEPTH, _W_GEN)
+        table.setColumnHidden(COL_GEN_DEPTH, True)
+
+        # Source: Stretch — absorbs blank space, hidden by default (behind lineage toggle)
+        hh.setSectionResizeMode(COL_SRC, QHeaderView.Stretch)
+        table.setColumnHidden(COL_SRC, True)
+        table.setContextMenuPolicy(Qt.CustomContextMenu)
+        table.customContextMenuRequested.connect(lambda pos, t=table: self._on_table_context_menu(pos, t))
+
+        table.setStyleSheet("""
+            QTableView {
+                background:#0d0d1c; alternate-background-color:#131326;
+                color:#ddd; border:none; font-size:12px;
+                selection-background-color:#1e3060;
+            }
+            QTableView::item { padding:3px 4px; }
+            QTableView::item:selected { color:#fff; }
+            QHeaderView::section {
+                background:#16213e; color:#888; padding:5px 4px;
+                border:none; border-bottom:1px solid #1e1e38;
+                border-right:1px solid #2a2a50;
+                font-size:11px; font-weight:bold;
+            }
+            QScrollBar:vertical { background:#0d0d1c; width:10px; }
+            QScrollBar::handle:vertical {
+                background:#252545; border-radius:5px; min-height:20px;
+            }
+        """)
+
+        table.selectionModel().selectionChanged.connect(lambda *_args, t=table: self._on_cat_table_selection(t))
+        table.clicked.connect(lambda idx, t=table: self._on_table_clicked(idx, t))
+        table.pressed.connect(lambda _idx, t=table: self._activate_cat_table(t))
+        return table
+
+    def _activate_cat_table(self, table: QTableView):
+        """Make *table* drive the detail panel even if its selection didn't change."""
+        if self._active_cat_table is not table:
+            self._active_cat_table = table
+            self._on_selection()
+
+    def _active_table_and_proxy(self):
+        """Table whose selection drives the detail panel and selection actions."""
+        table = getattr(self, "_active_cat_table", None) or self._table
+        if table is not self._table and self._children_panel.isHidden():
+            table = self._table
+        return table, table.model()
+
+    def _on_cat_table_selection(self, table: QTableView):
+        self._active_cat_table = table
+        self._on_selection()
+        if table is self._table:
+            self._update_children_parents_from_selection()
+
     def _on_selection(self):
+        table, proxy = self._active_table_and_proxy()
         rows = list({
-            self._proxy_model.mapToSource(idx).row()
-            for idx in self._table.selectionModel().selectedRows()
+            proxy.mapToSource(idx).row()
+            for idx in table.selectionModel().selectedRows()
         })
         cats = [c for r in rows[:2] if (c := self._source_model.cat_at(r)) is not None]
         room_key = self._current_room_key()
@@ -1760,26 +1862,30 @@ class MainWindow(QMainWindow):
         if self._safe_breeding_view is not None and self._safe_breeding_view.isVisible() and focus is not None:
             self._safe_breeding_view.select_cat(focus)
 
-    def _on_table_clicked(self, proxy_index: QModelIndex):
+    def _on_table_clicked(self, proxy_index: QModelIndex, table: Optional[QTableView] = None):
         if not proxy_index.isValid() or proxy_index.column() not in (COL_BL, COL_MB, COL_PIN):
             return
-        src_index = self._proxy_model.mapToSource(proxy_index)
+        table = table or self._table
+        src_index = table.model().mapToSource(proxy_index)
         if not src_index.isValid():
             return
         current = self._source_model.data(src_index, Qt.CheckStateRole)
         next_state = Qt.Unchecked if current == Qt.Checked else Qt.Checked
         if self._source_model.setData(src_index, next_state, Qt.CheckStateRole):
+            self._active_cat_table = table
             self._on_selection()
 
-    def _on_table_context_menu(self, pos):
-        index = self._table.indexAt(pos)
-        selection_model = self._table.selectionModel()
+    def _on_table_context_menu(self, pos, table: Optional[QTableView] = None):
+        table = table or self._table
+        self._active_cat_table = table
+        index = table.indexAt(pos)
+        selection_model = table.selectionModel()
         if index.isValid() and selection_model is not None and not selection_model.isSelected(index):
-            self._table.clearSelection()
-            self._table.selectRow(index.row())
+            table.clearSelection()
+            table.selectRow(index.row())
         cats = self._selected_cats()
         if not cats and index.isValid():
-            src_index = self._proxy_model.mapToSource(index)
+            src_index = table.model().mapToSource(index)
             if src_index.isValid():
                 cat = self._source_model.cat_at(src_index.row())
                 cats = [cat] if cat is not None else []
@@ -1810,7 +1916,7 @@ class MainWindow(QMainWindow):
         tag_menu = menu.addMenu(_tr("menu.context.tag_submenu", default="Tag"))
         self._populate_tag_context_submenu(tag_menu, cats)
 
-        menu.exec(self._table.viewport().mapToGlobal(pos))
+        menu.exec(table.viewport().mapToGlobal(pos))
 
     def _populate_tag_context_submenu(self, tag_menu: QMenu, cats: list):
         """Fill the RMB 'Tag' submenu with toggle actions for each defined tag."""
@@ -1881,6 +1987,7 @@ class MainWindow(QMainWindow):
         self._update_count()
         self._detail.show_cats([])
         self._source_model.set_focus_cat(None)
+        self._queue_children_layout_sync()
 
     def _visible_filtered_cats(self) -> list[Cat]:
         cats: list[Cat] = []
@@ -1894,9 +2001,10 @@ class MainWindow(QMainWindow):
         return cats
 
     def _selected_cats(self) -> list[Cat]:
+        table, proxy = self._active_table_and_proxy()
         cats: list[Cat] = []
-        for idx in self._table.selectionModel().selectedRows():
-            src_idx = self._proxy_model.mapToSource(idx)
+        for idx in table.selectionModel().selectedRows():
+            src_idx = proxy.mapToSource(idx)
             if not src_idx.isValid():
                 continue
             cat = self._source_model.cat_at(src_idx.row())
@@ -3021,7 +3129,7 @@ class MainWindow(QMainWindow):
         finally:
             selection_model.blockSignals(False)
 
-        self._on_selection()
+        self._on_cat_table_selection(self._table)
         return len(selection_model.selectedRows())
 
     def _cats_by_db_keys(self, db_keys: list[int]) -> list[Cat]:
@@ -3315,10 +3423,11 @@ class MainWindow(QMainWindow):
             self._tags_btn.rect().bottomLeft()))
 
     def _get_selected_cats(self) -> list:
-        """Get currently selected cats from the main table."""
+        """Get currently selected cats from the active (main or children) table."""
+        table, proxy = self._active_table_and_proxy()
         rows = set()
-        for idx in self._table.selectionModel().selectedRows():
-            src = self._proxy_model.mapToSource(idx)
+        for idx in table.selectionModel().selectedRows():
+            src = proxy.mapToSource(idx)
             rows.add(src.row())
         return [c for r in rows if (c := self._source_model.cat_at(r)) is not None]
 
@@ -3405,22 +3514,106 @@ class MainWindow(QMainWindow):
                 "QPushButton:hover { background:#252545; color:#ddd; }"
                 "QPushButton::menu-indicator { image:none; }")
 
-    def _show_column_value_filter(self, column: int, global_pos):
+    def _show_column_value_filter(self, table: QTableView, column: int, global_pos):
+        proxy = table.model()
         title = str(self._source_model.headerData(column, Qt.Horizontal, Qt.DisplayRole) or "").strip()
         popup = ColumnValueFilterPopup(
             title or _tr("table.column.tags", default="Tags"),
-            self._proxy_model.available_column_values(column),
-            self._proxy_model.column_value_filters.get(column, set()),
+            proxy.available_column_values(column),
+            proxy.column_value_filters.get(column, set()),
             self,
         )
-        popup.valuesChanged.connect(lambda values, col=column: self._set_column_value_filter(col, values))
+        popup.valuesChanged.connect(lambda values, t=table, col=column: self._set_column_value_filter(t, col, values))
         popup.popup_at(global_pos)
 
-    def _set_column_value_filter(self, column: int, values: set[str]):
-        self._proxy_model.set_column_value_filter(column, values)
-        self._column_filter_header.set_active_columns(self._proxy_model.column_value_filters.keys())
-        self._update_count()
-        self._refresh_bulk_view_buttons()
+    def _set_column_value_filter(self, table: QTableView, column: int, values: set[str]):
+        proxy = table.model()
+        proxy.set_column_value_filter(column, values)
+        table.horizontalHeader().set_active_columns(proxy.column_value_filters.keys())
+        if table is self._table:
+            self._update_count()
+            self._refresh_bulk_view_buttons()
+
+    # ── Children view ──────────────────────────────────────────────────────
+
+    def _toggle_children_view(self, checked: bool):
+        self._children_mode = bool(checked)
+        if self._children_mode:
+            self._update_children_parents_from_selection()
+            return
+        self._children_parent_keys = []
+        self._children_proxy.set_allowed_keys(set())
+        self._children_panel.hide()
+        if self._active_cat_table is self._children_table:
+            self._active_cat_table = self._table
+            self._on_selection()
+
+    def _update_children_parents_from_selection(self):
+        """Point the children table at the cats selected in the main table.
+
+        An empty selection keeps the previous parents so the panel doesn't
+        flicker closed while the main table is re-filtered.
+        """
+        if not self._children_mode:
+            return
+        keys: list[int] = []
+        for idx in self._table.selectionModel().selectedRows():
+            cat = self._source_model.cat_at(self._proxy_model.mapToSource(idx).row())
+            if cat is not None and cat.db_key not in keys:
+                keys.append(cat.db_key)
+        if not keys:
+            return
+        self._children_parent_keys = keys
+        self._refresh_children_table()
+
+    def _refresh_children_table(self):
+        if not self._children_mode or not self._children_parent_keys:
+            return
+        parents = self._cats_by_db_keys(self._children_parent_keys)
+        child_keys = {child.db_key for parent in parents for child in (getattr(parent, "children", None) or [])}
+        self._children_proxy.set_allowed_keys(child_keys)
+        if self._children_panel.isHidden():
+            self._children_panel.show()
+            sizes = self._children_splitter.sizes()
+            if len(sizes) == 2 and min(sizes) < 50:
+                total = sum(sizes)
+                self._children_splitter.setSizes([total - total // 2, total // 2])
+            self._sync_children_table_layout()
+        self._update_children_title()
+
+    def _update_children_title(self, *_args):
+        if not hasattr(self, "_children_title_lbl"):
+            return
+        parents = self._cats_by_db_keys(self._children_parent_keys)
+        if len(parents) == 1:
+            parent_text = parents[0].name
+        else:
+            parent_text = _tr("children.parents_count", default="{count} cats", count=len(parents))
+        shown = self._children_proxy.rowCount()
+        total = len(self._children_proxy.allowed_keys or ())
+        count_text = str(shown) if shown == total else f"{shown}/{total}"
+        self._children_title_lbl.setText(_tr(
+            "children.title", default="Children of {parent} — {count}",
+            parent=parent_text, count=count_text,
+        ))
+
+    def _queue_children_layout_sync(self, *_args):
+        panel = getattr(self, "_children_panel", None)
+        if panel is not None and not panel.isHidden():
+            self._children_layout_timer.start()
+
+    def _sync_children_table_layout(self):
+        """Mirror the main table's columns (order, widths, visibility) onto the children table."""
+        panel = getattr(self, "_children_panel", None)
+        if panel is None or panel.isHidden():
+            return
+        src = self._table.horizontalHeader()
+        dst = self._children_table.horizontalHeader()
+        sort_col, sort_order = dst.sortIndicatorSection(), dst.sortIndicatorOrder()
+        dst.restoreState(src.saveState())
+        dst.setSortIndicator(sort_col, sort_order)
+        self._children_table.verticalHeader().setDefaultSectionSize(self._table.verticalHeader().defaultSectionSize())
+        self._children_table.setIconSize(self._table.iconSize())
 
     def _refresh_views_for_tag_filter(self):
         """Push tag-filtered cat list to secondary views."""
@@ -4081,6 +4274,7 @@ class MainWindow(QMainWindow):
             self._table.setColumnHidden(col, not checked)
         self._source_model.set_show_lineage(checked)
         self._detail.set_show_lineage(checked)
+        self._queue_children_layout_sync()
         self._on_selection()   # refresh detail panel with updated flag
 
     def _open_file(self):

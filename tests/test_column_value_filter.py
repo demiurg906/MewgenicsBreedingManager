@@ -137,3 +137,16 @@ def test_header_emits_only_for_filterable_columns(qt_app):
         pos = QPoint(header.sectionViewportPosition(col) + 2, 2)
         header.contextMenuEvent(QContextMenuEvent(QContextMenuEvent.Mouse, pos, header.mapToGlobal(pos)))
     assert requested == [COL_ROOM]
+
+
+def test_allowed_keys_restricts_rows(proxy):
+    src = proxy.sourceModel()
+    keys = {src.cat_at(0).db_key, src.cat_at(3).db_key}
+    proxy.set_allowed_keys(keys)
+    assert _visible_names(proxy) == ["Ann", "Dee"]
+    # Column filters still apply on top, and only offer values from allowed rows.
+    assert proxy.available_column_values(COL_ROOM) == ["Attic", "Floor2"]
+    proxy.set_allowed_keys(set())
+    assert _visible_names(proxy) == []
+    proxy.set_allowed_keys(None)
+    assert len(_visible_names(proxy)) == 4
