@@ -10,7 +10,7 @@
 
 A Python desktop tool for managing your Mewgenics cats. Reads your save file directly, scores every cat for breeding priority, optimizes room layouts, and helps plan multi-generation lines — all while tracking lineage, inbreeding risk, and trait inheritance.
 
-Current release: `v5.8.4`
+Current release: `v5.9.0`
 
 If you'd like to support the project, you can [here](https://ko-fi.com/frankieg33).
 
@@ -110,6 +110,17 @@ Produces a standalone executable via PyInstaller.
 - Fork maintained by [demiurg906](https://github.com/demiurg906)
 
 ## Release Notes
+
+### v5.9.0
+
+Roster table upgrades and a Perfect 7 Planner fix.
+
+- **Effective Stats toggle**: a new header button switches the roster's stat columns from birth stats to effective stats (injuries, stat modifiers, and visual-mutation bonuses included). It shares state with Settings > Roster Display > Show Total Stats (Ctrl+T), stays locked on in Fight Club, and is remembered between sessions.
+- **Column value filters**: right-click the **Tags**, **Room**, or **Status** header to open a checkbox list of that column's values. Pick one or more to hide every other row; **Reset** clears the column. Filtered headers are highlighted, filters on different columns combine, and the list only offers values still visible under the other active filters.
+- **Children view**: the new **Children** header button opens a second roster table beside the main one, listing the direct offspring of the cat(s) selected in the main table (including gone and dead kittens). It has the full roster feature set — sorting, column filters, the right-click cat menu, Pin / Must Breed / Block checkboxes, tags — mirrors the main table's column layout, and drives the detail panel when you select a child. Saved main-table column layouts carry over.
+- **Toggle Can Breed**: breeding-compatibility dimming (graying out cats that can't breed with the selected cat) is now behind a header toggle and **off by default**. The Relation column's risk % is unaffected.
+- **Tag icons**: in-game tags are now centered in the Tags column, matching the "—" placeholder, and the Appeal and Comfort tags map to their correct icons.
+- **Perfect 7 Planner step descriptions restored**: the stage table again shows the per-pair **Why**, **Children**, and **Rotate** guidance that was dropped in v4.1.0. Column widths saved for the old 3-column layout are ignored once so the new columns start at sensible sizes.
 
 ### v5.8.4
 
