@@ -1336,6 +1336,11 @@ class MainWindow(QMainWindow):
             default="Show the children of the selected cat in a second table",
         ))
         self._update_children_title()
+        self._can_breed_btn.setText(_tr("header.can_breed_toggle", default="Toggle Can Breed"))
+        self._can_breed_btn.setToolTip(_tr(
+            "header.can_breed_toggle_tooltip",
+            default="Dim cats that can't breed with the selected cat",
+        ))
         self._total_stats_btn.setText(_tr("header.total_stats_toggle", default="Effective Stats"))
         self._total_stats_btn.setToolTip(_tr(
             "header.total_stats_toggle_tooltip",
@@ -1534,6 +1539,16 @@ class MainWindow(QMainWindow):
             "QPushButton:checked { background:#2a2a5a; color:#eee; border-color:#4a4a8a; }")
         self._children_btn.toggled.connect(self._toggle_children_view)
 
+        # Off by default: no breeding-compatibility dimming when a cat is selected.
+        self._can_breed_btn = QPushButton(_tr("header.can_breed_toggle", default="Toggle Can Breed"))
+        self._can_breed_btn.setCheckable(True)
+        self._can_breed_btn.setToolTip(_tr(
+            "header.can_breed_toggle_tooltip",
+            default="Dim cats that can't breed with the selected cat",
+        ))
+        self._can_breed_btn.setStyleSheet(self._children_btn.styleSheet())
+        self._can_breed_btn.toggled.connect(lambda checked: self._source_model.set_dim_incompatible(checked))
+
         self._total_stats_btn = QPushButton(_tr("header.total_stats_toggle", default="Effective Stats"))
         self._total_stats_btn.setCheckable(True)
         self._total_stats_btn.setChecked(_saved_total_stats_display())
@@ -1567,6 +1582,8 @@ class MainWindow(QMainWindow):
         hb.addWidget(bulk_container)
         hb.addSpacing(8)
         hb.addWidget(self._children_btn)
+        hb.addSpacing(4)
+        hb.addWidget(self._can_breed_btn)
         hb.addSpacing(10)
         hb.addWidget(self._total_stats_btn)
         hb.addSpacing(4)

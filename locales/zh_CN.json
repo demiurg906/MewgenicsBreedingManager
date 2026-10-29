@@ -123,6 +123,8 @@
   "header.total_stats_toggle_tooltip": "显示有效属性（包含伤病、突变及其他修正）而非出生属性 (Ctrl+T)",
   "header.children_toggle": "子代",
   "header.children_toggle_tooltip": "在第二个表格中显示所选猫的子代",
+  "header.can_breed_toggle": "切换可繁殖",
+  "header.can_breed_toggle_tooltip": "将无法与所选猫繁殖的猫变暗显示",
   "children.title": "{parent} 的子代 — {count}",
   "children.parents_count": "{count} 只猫",
   "column_filter.reset": "重置",

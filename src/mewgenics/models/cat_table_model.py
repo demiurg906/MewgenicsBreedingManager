@@ -605,6 +605,7 @@ class CatTableModel(QAbstractTableModel):
         self._cats: list[Cat] = []
         self._focus_cat: Optional[Cat] = None
         self._show_lineage: bool = False
+        self._dim_incompatible: bool = False  # breeding-compatibility dimming for the focus cat
         self._relation_cache: dict[int, float] = {}
         self._compat_cache: dict[int, str] = {}
         self._inbred_score_cache: dict[int, int] = {}
@@ -641,6 +642,20 @@ class CatTableModel(QAbstractTableModel):
                 self.index(len(self._cats) - 1, len(COLUMNS) - 1),
                 [Qt.DisplayRole, Qt.UserRole, Qt.BackgroundRole, Qt.ForegroundRole],
             )
+
+    def set_dim_incompatible(self, enabled: bool):
+        if self._dim_incompatible == bool(enabled):
+            return
+        self._dim_incompatible = bool(enabled)
+        if self._cats:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self._cats) - 1, len(COLUMNS) - 1),
+                [Qt.BackgroundRole, Qt.ForegroundRole],
+            )
+
+    def dim_incompatible(self) -> bool:
+        return self._dim_incompatible
 
     def set_show_lineage(self, show: bool):
         self._show_lineage = show
@@ -818,7 +833,7 @@ class CatTableModel(QAbstractTableModel):
         return pct
 
     def _compat_for(self, cat: Cat) -> Optional[str]:
-        if self._focus_cat is None or cat is self._focus_cat:
+        if not self._dim_incompatible or self._focus_cat is None or cat is self._focus_cat:
             return None
         focus = self._focus_cat
         key = id(cat)

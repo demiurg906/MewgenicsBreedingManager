@@ -132,6 +132,8 @@
   "header.total_stats_toggle_tooltip": "Show effective stats (including injuries, mutations and other modifiers) instead of birth stats (Ctrl+T)",
   "header.children_toggle": "Children",
   "header.children_toggle_tooltip": "Show the children of the selected cat in a second table",
+  "header.can_breed_toggle": "Toggle Can Breed",
+  "header.can_breed_toggle_tooltip": "Dim cats that can't breed with the selected cat",
   "children.title": "Children of {parent} — {count}",
   "children.parents_count": "{count} cats",
   "column_filter.reset": "Reset",

@@ -123,6 +123,8 @@
   "header.total_stats_toggle_tooltip": "Pokazuj efektywne statystyki (z uwzględnieniem obrażeń, mutacji i innych modyfikatorów) zamiast statystyk z urodzenia (Ctrl+T)",
   "header.children_toggle": "Potomstwo",
   "header.children_toggle_tooltip": "Pokaż potomstwo zaznaczonego kota w drugiej tabeli",
+  "header.can_breed_toggle": "Przełącz zgodność",
+  "header.can_breed_toggle_tooltip": "Przyciemniaj koty, które nie mogą rozmnażać się z zaznaczonym kotem",
   "children.title": "Potomstwo: {parent} — {count}",
   "children.parents_count": "{count} kotów",
   "column_filter.reset": "Resetuj",

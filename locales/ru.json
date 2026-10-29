@@ -123,6 +123,8 @@
   "header.total_stats_toggle_tooltip": "Показывать текущие характеристики (с учётом травм, мутаций и других модификаторов) вместо врождённых (Ctrl+T)",
   "header.children_toggle": "Дети",
   "header.children_toggle_tooltip": "Показать детей выбранного кота во второй таблице",
+  "header.can_breed_toggle": "Совместимость",
+  "header.can_breed_toggle_tooltip": "Затемнять котов, которые не могут размножаться с выбранным котом",
   "children.title": "Дети: {parent} — {count}",
   "children.parents_count": "котов: {count}",
   "column_filter.reset": "Сбросить",
